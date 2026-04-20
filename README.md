@@ -29,8 +29,6 @@ Out of 20 songs, 3 were lofi and most other genres only had 1 song each. That qu
 
 ## Architecture Overview
 
-![System diagram](assets/screenshot_system_diagram.png)
-
 The system is six components in a pipeline, with a check at each boundary:
 
 1. **User Input** - three ways in: natural language description, one of the 7 presets, or custom sliders. The text box is the default experience.
@@ -175,6 +173,9 @@ I was honestly surprised by this one. I expected the model to either pick one si
 
 > See [assets/reliability_report.md](assets/reliability_report.md) for all 8 golden-set cases with pass/fail per constraint.
 
+![Reliability case study](assets/screenshot_reliability_tab_case_study.png)
+*A single case rendered inside the Reliability tab: the parsed profile JSON, Gemini's rationale, and the constraint table with pass/fail per row.*
+
 ---
 
 ## Design Decisions
@@ -248,7 +249,7 @@ VibeMatch 2.0 shows how I approach AI engineering. I started with a plain comman
 |---|---|
 | ![Hero](assets/screenshot_hero.png) | ![Result card](assets/screenshot_result_card.png) |
 | Natural language hero input with example chips | Result card with feature importance chart expanded |
-| ![Reliability tab](assets/screenshot_reliability_tab.png) | ![System diagram](assets/screenshot_system_diagram.png) |
-| Reliability tab rendering the latest evaluation report | The system diagram at a glance |
+| ![Reliability tab](assets/screenshot_reliability_tab.png) | ![Reliability case study](assets/screenshot_reliability_tab_case_study.png) |
+| Reliability tab: summary of all 8 golden-set cases | Reliability tab: detail view of a single case |
 
 *(PNGs added separately. Take them with the dashboard running at `streamlit run src/app.py`.)*
