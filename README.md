@@ -1,6 +1,6 @@
 # 🎵 VibeMatch 2.0 - A Transparent Music Recommender
 
-VibeMatch 2.0 is a content-based music recommender where a user describes how they feel in plain English and gets back ranked songs with a visible, auditable reason for every score. A Google Gemini LLM translates the description into a structured taste profile, a deterministic Gaussian-decay scoring engine ranks the catalog, and a Streamlit dashboard surfaces per-feature importance charts plus the LLM's own rationale. The responsible-AI design principle throughout: **the LLM is the front door, not the decision-maker**, so every ranking decision stays in code you can read.
+VibeMatch 2.0 is a content-based music recommender where you describe how you're feeling in plain English and get back ranked songs, each with a visible reason for its score. A Google Gemini LLM reads your description and turns it into a structured taste profile, a deterministic scoring engine ranks the 20 songs in the catalog, and a Streamlit dashboard exposes exactly which features drove each ranking. The design principle I kept coming back to: **the LLM is a translator, not the thing picking your songs**. That way every recommendation is still explainable in code I can read and audit.
 
 ![Dashboard hero](assets/screenshot_hero.png)
 
@@ -8,22 +8,22 @@ VibeMatch 2.0 is a content-based music recommender where a user describes how th
 
 ## Original Project: VibeMatch 1.0
 
-VibeMatch 2.0 extends **VibeMatch 1.0**, the content-based music recommender I built for **AI110 Module 3** (*Music Recommender Simulation*). The original was a command-line tool backed by a 20-song CSV catalog, a weighted Gaussian-decay scoring engine combining categorical matches (genre, mood) with numeric features (energy, valence, danceability, acousticness, tempo), and seven hand-crafted user profiles (four realistic, three adversarial) used to probe the scoring logic. The starter also shipped with a model card documenting known catalog limitations. In particular, a severe density imbalance (lofi has three songs; most other genres have one) that the model card called out directly:
+The starter version of this, which I called **VibeMatch 1.0**, was the project I built for **AI110 Module 3** (*Music Recommender Simulation*). It was a command line tool on top of a 20-song CSV catalog. The scoring logic used Gaussian decay on numeric features (energy, valence, danceability, and a few others) plus binary matching on genre and mood, with seven pre-written user profiles for testing. The model card I wrote for it flagged a problem right at the start:
 
 > *"A system can look like it's working when it's really just defaulting to whatever the data has the most of."*
 
-The 2.0 extension was shaped by that limitation: the goal was to make the system's reasoning legible to the user so they could see **why** a recommendation won, not just *that* it won.
+Out of 20 songs, 3 were lofi and most other genres only had 1 song each. That quote stuck with me and it's basically why I built VibeMatch 2.0 the way I did. I wanted the system to show its work so the user could tell the difference between "this actually matches you" and "this just happens to be in the catalog."
 
 ---
 
 ## What's New in 2.0
 
-- **Streamlit dashboard** replacing the CLI, with the natural-language input as the hero feature
-- **Per-feature importance charts** (Plotly) that decompose every score into weighted contributions. Users hover to see exactly which features earned a song its ranking.
-- **Natural-language profile builder** powered by Google Gemini 2.5 Flash with schema-constrained JSON output, so "I want something warm and unhurried" becomes a structured `UserProfile` the deterministic scorer can consume
-- **Confidence signals** on every result card (*Strong / Moderate / Weak*) plus a *Ranking confidence* summary above the top-k based on how tightly clustered the scores are
-- **LLM evaluation harness** (`scripts/evaluate_parser.py`) that runs a hand-written golden set through live Gemini, checks each parsed profile against assertions, and writes a markdown report at [assets/reliability_report.md](assets/reliability_report.md)
-- **Reliability tab** in the dashboard that embeds the latest report inline, so the evidence lives next to the feature and not buried in a repo
+- A Streamlit dashboard replacing the CLI, with the natural language input as the hero feature
+- Per-feature importance charts (Plotly) on every recommendation, with hover tooltips showing exactly how much each feature contributed to the score
+- A natural language profile builder powered by Gemini 2.5 Flash. Type "I want something warm and unhurried" and it gets turned into a structured profile the scorer can consume.
+- Confidence badges on every result card (Strong / Moderate / Weak), plus a ranking confidence summary above the list that reflects how tightly clustered the top scores are
+- An evaluation harness (`scripts/evaluate_parser.py`) that runs a hand-written set of known prompts through live Gemini and checks each parsed profile against assertions
+- A Reliability tab inside the dashboard that renders the latest evaluation report inline, so the evidence that the LLM is working sits next to the feature and not buried somewhere in the repo
 
 ---
 
@@ -31,16 +31,16 @@ The 2.0 extension was shaped by that limitation: the goal was to make the system
 
 ![System diagram](assets/screenshot_system_diagram.png)
 
-The system is organized as a pipeline of six components with explicit verification at each boundary:
+The system is six components in a pipeline, with a check at each boundary:
 
-1. **User Input** - three paths (natural-language description, preset profile, or custom sliders). The NL path is the default hero experience.
-2. **LLM Agent (Gemini 2.5 Flash)** - reads natural language and emits a structured `UserProfile` JSON via schema-constrained output. Genre / mood / mood-tag values are restricted to `enum` lists pulled from the catalog so the model can't invent a genre that doesn't exist. Returns a plain-English rationale alongside the profile.
-3. **Deterministic Scoring Engine** - the same Gaussian-decay and weighted categorical logic from VibeMatch 1.0. Every ranking decision happens here, not in the LLM.
-4. **Explainability Layer** - decomposes every score into ten per-feature weighted contributions for the charts, raises a low-confidence warning when `top_score < 0.45`, and surfaces the LLM's rationale for user review.
-5. **Streamlit Dashboard** - hero NL input, result cards with gradient score bars and confidence badges, feature-importance expanders, and a Reliability tab embedding the evaluation report.
-6. **Human-in-the-Loop** - the user reviews the "How Gemini read you" panel *before* trusting the results and can always override the LLM by switching to a preset or custom profile.
+1. **User Input** - three ways in: natural language description, one of the 7 presets, or custom sliders. The text box is the default experience.
+2. **LLM Agent (Gemini 2.5 Flash)** - reads the description and returns a structured `UserProfile` JSON. The genre and mood fields are restricted to enum lists pulled from the catalog, so Gemini can't invent a genre that doesn't exist. It also returns a short rationale explaining what it picked.
+3. **Deterministic Scoring Engine** - the same Gaussian-decay logic from VibeMatch 1.0. The actual song picking happens here, not in the LLM.
+4. **Explainability Layer** - breaks every score into 10 per-feature contributions for the charts, fires a warning if the top score is under 0.45, and keeps Gemini's rationale so the user can see it.
+5. **Streamlit Dashboard** - the hero NL input at the top, result cards with score bars and confidence badges, expandable feature importance charts, and the Reliability tab.
+6. **Human-in-the-Loop** - the "How Gemini read you" panel lets the user see the parsed profile before trusting the results. If it looks wrong they can always switch to preset or custom.
 
-A deeper Mermaid-rendered diagram with tables describing every verification point lives at [assets/system_diagram.md](assets/system_diagram.md). The scoring-pipeline detail from the starter project is preserved at [assets/flowchart.md](assets/flowchart.md).
+The full Mermaid-rendered diagram is at [assets/system_diagram.md](assets/system_diagram.md). The scoring pipeline diagram from the starter is still at [assets/flowchart.md](assets/flowchart.md).
 
 ---
 
@@ -49,7 +49,7 @@ A deeper Mermaid-rendered diagram with tables describing every verification poin
 ### Prerequisites
 
 - Python 3.10 or later
-- A free Google Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey). Free tier is **5 requests per minute** for `gemini-2.5-flash`, which is plenty for demo usage but worth knowing.
+- A free Google Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey). The free tier for `gemini-2.5-flash` is **5 requests per minute**, which is enough for demo use but worth knowing before running the evaluation harness.
 
 ### Install and run
 
@@ -77,19 +77,19 @@ The dashboard opens at [http://localhost:8501](http://localhost:8501).
 
 ### What happens without an API key?
 
-If `GEMINI_API_KEY` is missing, the natural-language input is gracefully disabled with an explanatory message, and the **Preset** and **Custom** profile sources in the sidebar continue to work. The dashboard never crashes on a missing key. This is one of the intentional reliability properties.
+If you don't set `GEMINI_API_KEY`, the natural language input gets disabled with a message telling you why. The **Preset** and **Custom** profile sources keep working. The dashboard doesn't crash on a missing key. I wanted that to be a graceful fallback.
 
 ### Alternate entry points
 
 ```bash
-# Classic CLI runner (the original VibeMatch 1.0 interface, preserved)
+# Classic CLI runner (the original VibeMatch 1.0 interface)
 python -m src.main
 
-# Run the unit test suite (12 tests; no live API calls, safe for CI)
+# Run the unit test suite (12 tests, no live API calls)
 pytest tests/ -v
 
-# Regenerate the reliability report by running the golden-set harness
-# against live Gemini (takes ~2 minutes due to 5-RPM pacing)
+# Regenerate the reliability report by running the golden set
+# against live Gemini (takes about 2 minutes because of 5 RPM pacing)
 python -m scripts.evaluate_parser
 ```
 
@@ -97,11 +97,11 @@ python -m scripts.evaluate_parser
 
 ## Sample Interactions
 
-Every example below is real output from Gemini 2.5 Flash on the live API, excerpted verbatim from [assets/reliability_report.md](assets/reliability_report.md), which contains all eight golden-set cases with pass/fail per constraint.
+Every example below is real output from Gemini 2.5 Flash, quoted verbatim from [assets/reliability_report.md](assets/reliability_report.md). That file has all 8 cases from the evaluation harness with pass/fail per constraint.
 
 ![Result card with feature importance](assets/screenshot_result_card.png)
 
-### Example 1 - Straightforward mapping
+### Example 1 - An easy one
 
 **Input:**
 
@@ -122,11 +122,11 @@ Every example below is real output from Gemini 2.5 Flash on the live API, excerp
 
 > *"The description 'Sunday morning coffee and journaling, slow and acoustic' strongly suggests a peaceful and relaxed mood. I've set high acousticness and low energy/danceability to match the 'slow and acoustic' preference. The preferred mood tags reflect the calm and introspective nature of journaling."*
 
-The model extracted the obvious cues (*slow*, *acoustic*) and made them extreme (`acousticness = 0.95`, `energy = 0.25`) while keeping `valence` positive. The result reads as a relaxed *morning* vibe, not a sad one.
+Gemini grabbed the obvious cues (*slow*, *acoustic*) and pushed them to the extremes (acousticness 0.95, energy 0.25) but kept valence positive. A relaxed morning vibe, not a sad one.
 
 ---
 
-### Example 2 - Nuanced interpretation
+### Example 2 - A harder one
 
 **Input:**
 
@@ -147,11 +147,11 @@ The model extracted the obvious cues (*slow*, *acoustic*) and made them extreme 
 
 > *"The request for 'calm but not sleepy' suggests a relaxed, low-energy vibe that isn't completely static, leading to a moderate energy and danceability. 'Evening wind-down' points to a peaceful and mellow mood, with a slightly positive valence. Lofi is a suitable genre for this specific combination of traits."*
 
-This one required the model to thread a needle: *calm* pushes energy down, *not sleepy* pushes it back up. Gemini landed at `0.45` (low but not near zero) and explained the trade-off in the rationale. This is exactly the kind of response the "LLM as translator" design is meant to produce.
+This one is more interesting. "Calm" pushes energy down, but "not sleepy" pushes it back up a little. Gemini landed at 0.45, which felt right, and actually explained the trade-off in the rationale. This is the kind of reasoning I was hoping for when I decided to use the LLM as a translator instead of a decision maker.
 
 ---
 
-### Example 3 - Adversarial contradiction
+### Example 3 - A contradiction on purpose
 
 **Input:**
 
@@ -171,7 +171,7 @@ This one required the model to thread a needle: *calm* pushes energy down, *not 
 
 > *"The request for 'extremely calm and extremely loud' presents a contradiction. I've interpreted 'calm' as low energy and peaceful, while 'loud' is understood as a full, immersive soundscape that can be experienced at high volume, rather than high energy or aggression. Ambient music is chosen as it can provide a serene atmosphere with rich, expansive sound textures."*
 
-Given a deliberately contradictory prompt, the model didn't return garbage or split the difference at `0.5` across every field. It explicitly named the contradiction, made a defensible trade-off (*calm* = low energy, *loud* = rich soundscape rather than aggression), and picked a genre whose canonical interpretation matches that reconciliation. This is what the reliability harness was built to verify.
+I was honestly surprised by this one. I expected the model to either pick one side of the contradiction or split the difference at 0.5 on every field. Instead it named the contradiction out loud and reasoned its way to ambient music, where "loud" makes sense as "rich soundscape" rather than "high energy." This is what I was hoping for when I added the adversarial case to the evaluation set.
 
 > See [assets/reliability_report.md](assets/reliability_report.md) for all 8 golden-set cases with pass/fail per constraint.
 
@@ -179,19 +179,19 @@ Given a deliberately contradictory prompt, the model didn't return garbage or sp
 
 ## Design Decisions
 
-Every major architectural choice in VibeMatch 2.0 traded something off. Here are the ones worth a recruiter's time:
+Every bigger architectural choice involved a trade-off. These are the ones I think are worth calling out.
 
-**LLM as translator, not decision-maker.** I deliberately scoped Gemini to a single job (turning natural language into a structured `UserProfile`) and kept every ranking decision in deterministic code. This makes every recommendation explainable and reproducible. The trade-off: the system can't do open-ended reasoning about music the way a pure-LLM approach could. I judged that auditability was worth more than flexibility for a system that's supposed to *show its work*.
+**Using the LLM only as a translator.** I could have asked Gemini to pick songs directly, but then I couldn't explain any individual recommendation. By limiting it to "turn English into a structured profile," every ranking stays in code I wrote and can test. The cost is that the system can't reason creatively about music the way a pure-LLM setup could. For a class project about responsible AI, auditability was worth more to me than that flexibility.
 
-**Schema-constrained structured output with enum grounding.** The JSON schema passed to Gemini constrains `favorite_genre`, `favorite_mood`, and `preferred_mood_tags` to `enum` lists drawn from the catalog at import time, so the model literally can't hallucinate a genre that doesn't exist. Trade-off: Gemini's current Schema type doesn't support integer enums cleanly, so `target_decade` is validated via a system-prompt instruction plus a runtime check rather than a hard enum constraint.
+**Schema-constrained output with enum grounding.** I passed Gemini a JSON schema with the genre and mood fields locked to enum lists pulled from the catalog at import time. That means it literally cannot return a genre that doesn't exist in my data. Cost: the Gemini SDK's Schema type didn't play nicely with integer enums, so for `target_decade` I ended up relying on a system prompt instruction plus a runtime check instead of a hard schema constraint.
 
-**Post-hoc numeric clamping with `warnings.warn`.** Numeric fields (`target_energy`, `target_tempo_bpm`, etc.) are clamped to valid ranges after parsing, and every clamp emits a `UserWarning`. Trade-off: clamping silently adjusts the profile, but surfacing a warning lets us log or display the adjustment rather than hiding it.
+**Clamping numeric values after parsing.** If Gemini ever returns `target_energy = 1.5`, I clamp it to 1.0 and emit a `UserWarning`. The trade-off is that clamping silently changes the profile, but I wanted that change to show up in logs rather than stay hidden.
 
-**Plotly over matplotlib.** Plotly renders interactive bar charts with hover tooltips inside Streamlit, which sells the XAI story: users can hover over "Energy" and see `0.253 pts (weight 4.0 × raw 0.98 / 15.5)`. Trade-off: one extra dependency and slightly heavier page load compared to static matplotlib.
+**Plotly instead of matplotlib for the feature charts.** Plotly gives you interactive hover tooltips, which I thought were important for the XAI story (you can hover on "Energy" and see `0.253 pts (weight 4.0 × raw 0.98 / 15.5)`). The cost is one extra dependency.
 
-**Gemini 2.5 Flash over OpenAI or Claude.** Gemini is the only major LLM provider with a genuinely free tier that supports structured JSON output. Trade-off: the free tier is capped at **5 RPM**, which pushed the reliability harness to pace calls at 13-second intervals. For a demo or class project this is fine; for production it would mean moving to a paid tier or queuing requests.
+**Gemini 2.5 Flash instead of OpenAI or Claude.** Gemini is the only one of the three with a truly free tier that supports structured JSON output. The trade-off showed up immediately: the free tier is capped at 5 requests per minute, which I'll come back to in the testing section.
 
-**Golden-set assertion harness over LLM-as-judge evaluation.** The reliability harness (`scripts/evaluate_parser.py`) checks hand-written, falsifiable assertions (*"target_energy must be < 0.55 for the 'chill study' case"*) rather than using a second LLM to grade the first. Trade-off: the harness only tests what you explicitly assert, so subtler quality properties like tone, creativity, or naturalness of the rationale are invisible to it. But it's cheap, fast, and the assertions are themselves documentation of what "good" means.
+**Hand-written assertions instead of LLM-as-judge.** For the reliability harness I could have used another LLM call to grade the output. Instead I wrote explicit assertions like "target_energy must be < 0.55 for the chill-study case." It's cheaper, faster, and the results are falsifiable. The cost is that subtler quality issues (tone, creativity, whether the rationale reads well) aren't checked at all. The assertions also end up doubling as documentation of what "good" output looks like.
 
 ---
 
@@ -199,21 +199,21 @@ Every major architectural choice in VibeMatch 2.0 traded something off. Here are
 
 ### What worked
 
-- **12/12 unit tests pass** in under a second. Eight cover the scoring engine (including `test_feature_weights_sum_to_total`, an invariant stating that the per-feature weighted contributions on any chart must sum to the displayed total score). Four cover the LLM parser using `unittest.mock.patch`, so they run in CI without hitting the real API or needing a key. See [tests/test_recommender.py](tests/test_recommender.py) and [tests/test_profile_parser.py](tests/test_profile_parser.py).
-- **18/18 reliability constraints pass** on the 8-case golden set against live Gemini. Generated report: [assets/reliability_report.md](assets/reliability_report.md).
-- **Streamlit startup is clean:** no tracebacks, `HTTP 200` on smoke tests, feature importance charts render correctly across all 7 preset profiles and a range of natural-language inputs.
+- **12/12 unit tests pass** in under a second. 8 of them cover the scoring engine, including `test_feature_weights_sum_to_total`, which checks that the per-feature values on every chart actually add up to the displayed total score. 4 cover the LLM parser with mocked responses, so they run in CI without needing an API key. Files: [tests/test_recommender.py](tests/test_recommender.py) and [tests/test_profile_parser.py](tests/test_profile_parser.py).
+- **18/18 reliability constraints pass** when I run the golden set against live Gemini. The generated report is at [assets/reliability_report.md](assets/reliability_report.md).
+- **Streamlit starts cleanly.** No tracebacks, HTTP 200, and the feature importance charts render for all 7 preset profiles.
 
-### What didn't work on the first try
+### What didn't work the first time
 
-- **Import-path mismatch between agents.** When two sub-agents built `src/app.py` and `src/profile_parser.py` in parallel, one used `from profiles import ...` (which works because `streamlit run src/app.py` puts `src/` on `sys.path`) and the other used `from src.profiles import ...` (which requires the repo root on `sys.path`). The app imported fine but broke the moment the user clicked "Find my vibe" and triggered a lazy parser import. Fixed by prepending the repo root to `sys.path` at the top of `app.py` and normalizing to `from src.*` imports throughout.
-- **Gemini free-tier rate limit turned out to be 5 RPM, not 15.** My first reliability-harness run called Gemini 8 times in rapid succession; calls 7 and 8 came back `429 RESOURCE_EXHAUSTED`. Fixed with a 13-second sleep between calls, which still keeps a full golden-set run under ~2 minutes.
-- **The "80s retro synthwave" golden-set case failed on the first live run.** The catalog's `KNOWN_DECADES` enum is `[1990, 2000, 2010, 2020]`, so there is no 1980. Forced to pick from that list, Gemini chose 2010 and correctly reasoned about *"synthwave's resurgence"* in its rationale. My test was too strict. I relaxed the assertion to `target_decade <= 2010`, which matches the catalog's reality. This was a real **catalog-bias finding surfaced by the harness**, a class of issue the unit tests would never have caught.
+- **Two of my modules disagreed about imports.** While I was building the parser and the app in parallel, one of them used `from profiles import ...` and the other used `from src.profiles import ...`. The app imported fine on startup but crashed the moment I clicked "Find my vibe" and it tried to lazy-import the parser. I fixed it by prepending the repo root to `sys.path` at the top of `app.py` and using `from src.*` everywhere.
+- **I was wrong about Gemini's free tier rate limit.** I thought it was 15 requests per minute. It's 5. The first time I ran the evaluation harness, calls 7 and 8 came back `429 RESOURCE_EXHAUSTED`. I added a 13-second sleep between calls, which made a full run take about 2 minutes.
+- **The "80s retro" test case failed the first run, but for an interesting reason.** The catalog's `KNOWN_DECADES` list is `[1990, 2000, 2010, 2020]`. There is no 1980 in the data. Forced to pick from the list, Gemini went with 2010 and said in its rationale that it was picking that decade for "synthwave's resurgence." The failure was really about my catalog, not the LLM. I relaxed the assertion to `target_decade <= 2010`, which matches reality. This is exactly the kind of problem the harness is supposed to surface.
 
 ### What I learned
 
-- **An LLM evaluation harness pays for itself on the first run.** Mine caught a legitimate catalog-bias issue that unit tests missed, and it took about two hours to build. That ratio is compelling.
-- **Integration smoke tests catch more classes of bug than any single unit test.** Running the dashboard end-to-end and hitting it with `curl` uncovered the import-path mismatch that passed every unit test.
-- **LLM rate limits deserve first-class design consideration.** Free-tier capacity planning matters even for demos, because burst usage in the dashboard could easily trip a quota that a careful harness pacing strategy avoids.
+- **The evaluation harness paid off the first time I ran it.** It caught the catalog decade bias right away, and that's a class of issue my unit tests would never have found.
+- **Integration smoke tests (just running the app and hitting it with curl) caught bugs that passed every unit test.** The import mismatch above is the best example.
+- **Rate limits are a design constraint, not an afterthought.** If I had been thinking about 5 RPM from the start I would have built the pacing in from day one.
 
 ---
 
@@ -228,14 +228,14 @@ VibeMatch 2.0 shows how I approach AI engineering. I started with a plain comman
 | Path | What's in it |
 |---|---|
 | [src/app.py](src/app.py) | Streamlit dashboard: hero NL input, result cards, feature-importance charts, Reliability tab |
-| [src/recommender.py](src/recommender.py) | Deterministic scoring engine, `score_song_detailed` (returns structured per-feature breakdown), `Recommender` OOP class |
-| [src/profile_parser.py](src/profile_parser.py) | Gemini-backed natural-language to `UserProfile` parser with schema validation and clamping |
+| [src/recommender.py](src/recommender.py) | Deterministic scoring engine, `score_song_detailed`, and the `Recommender` OOP class |
+| [src/profile_parser.py](src/profile_parser.py) | Gemini-backed natural language to `UserProfile` parser with schema validation and clamping |
 | [src/profiles.py](src/profiles.py) | 7 preset profiles and `KNOWN_GENRES` / `KNOWN_MOODS` / `KNOWN_MOOD_TAGS` derived from the catalog |
 | [src/main.py](src/main.py) | Classic CLI runner preserved from VibeMatch 1.0 |
 | [scripts/evaluate_parser.py](scripts/evaluate_parser.py) | LLM evaluation harness: golden set, assertion runner, markdown report writer |
-| [tests/](tests/) | 12 automated tests (scorer invariants and mocked parser tests) |
+| [tests/](tests/) | 12 automated tests (scorer invariants plus mocked parser tests) |
 | [assets/system_diagram.md](assets/system_diagram.md) | Full Mermaid system diagram with verification-point tables |
-| [assets/flowchart.md](assets/flowchart.md) | Scoring-pipeline detail from the VibeMatch 1.0 starter |
+| [assets/flowchart.md](assets/flowchart.md) | Scoring-pipeline diagram from the VibeMatch 1.0 starter |
 | [assets/reliability_report.md](assets/reliability_report.md) | Latest golden-set evaluation report |
 | [model_card.md](model_card.md) | Bias analysis and limitations from VibeMatch 1.0 |
 | [requirements.txt](requirements.txt) | `streamlit`, `plotly`, `google-genai`, `python-dotenv`, `pandas`, `pytest` |
@@ -247,7 +247,7 @@ VibeMatch 2.0 shows how I approach AI engineering. I started with a plain comman
 | | |
 |---|---|
 | ![Hero](assets/screenshot_hero.png) | ![Result card](assets/screenshot_result_card.png) |
-| Natural-language hero input with example chips | Result card with feature-importance chart expanded |
+| Natural language hero input with example chips | Result card with feature importance chart expanded |
 | ![Reliability tab](assets/screenshot_reliability_tab.png) | ![System diagram](assets/screenshot_system_diagram.png) |
 | Reliability tab rendering the latest evaluation report | The system diagram at a glance |
 
