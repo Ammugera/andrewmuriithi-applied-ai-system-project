@@ -90,6 +90,22 @@ def _score_color(score: float) -> str:
     return "#22c55e"
 
 
+def _confidence_tier(score: float, gap_to_next: Optional[float] = None) -> tuple[str, str]:
+    """Returns (label, color) for a reliability badge.
+
+    Two signals:
+      * absolute score — how well does this song fit the profile?
+      * gap to next — if this result is tightly clustered with the next one,
+        ranking confidence is lower even if the absolute score is good.
+    """
+    if score < 0.45:
+        return "Weak match", "#ef4444"
+    tight_cluster = gap_to_next is not None and gap_to_next < 0.03
+    if score < 0.70 or tight_cluster:
+        return "Moderate match", "#eab308"
+    return "Strong match", "#22c55e"
+
+
 def _gradient_bar(score: float) -> str:
     pct = max(0, min(100, int(score * 100)))
     color = _score_color(score)
@@ -325,14 +341,18 @@ def _render_parsed_profile_panel(profile: Dict, rationale: str) -> None:
             )
 
 
-def _render_result_card(rank: int, result: Dict) -> None:
+def _render_result_card(rank: int, result: Dict, gap_to_next: Optional[float] = None) -> None:
     song = result["song"]
     score = result["score"]
+    tier_label, tier_color = _confidence_tier(score, gap_to_next)
     header = f"#{rank}  {song['title']} — {song['artist']}"
     st.markdown(
         f"<div style='background:{CARD_BG};padding:16px 20px;border-radius:12px;"
         f"margin-bottom:14px;'>"
-        f"<div style='font-size:1.1rem;font-weight:600;margin-bottom:6px;'>{header}</div>"
+        f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;'>"
+        f"<div style='font-size:1.1rem;font-weight:600;'>{header}</div>"
+        f"{_badge(tier_label, tier_color)}"
+        f"</div>"
         f"{_badge(song['genre'], GENRE_COLOR)}{_badge(song['mood'], MOOD_COLOR)}"
         f"{_gradient_bar(score)}"
         f"</div>",
@@ -343,6 +363,39 @@ def _render_result_card(rank: int, result: Dict) -> None:
             _feature_importance_chart(result["features"]),
             use_container_width=True,
         )
+
+
+def _render_ranking_confidence(results: List[Dict]) -> None:
+    """Headline confidence summary: how tightly clustered are the top scores?
+
+    A wide spread between #1 and the median of the rest means the top pick
+    stands apart. A narrow spread means many songs are roughly interchangeable
+    for this profile — the ranking itself is less confident.
+    """
+    if len(results) < 2:
+        return
+    top = results[0]["score"]
+    median_of_rest = sorted(r["score"] for r in results[1:])[len(results[1:]) // 2]
+    spread = top - median_of_rest
+    if spread >= 0.10:
+        label, color = "High ranking confidence", "#22c55e"
+        note = "The top pick stands clearly apart from the rest."
+    elif spread >= 0.04:
+        label, color = "Moderate ranking confidence", "#eab308"
+        note = "The top pick is ahead but the field is close."
+    else:
+        label, color = "Low ranking confidence", "#ef4444"
+        note = "Many songs scored similarly — the ranking order is soft."
+    st.markdown(
+        f"<div style='background:{CARD_BG};padding:10px 16px;border-radius:10px;"
+        f"margin:4px 0 14px 0;display:flex;align-items:center;gap:12px;'>"
+        f"{_badge(label, color)}"
+        f"<span style='color:#cbd5e1;font-size:0.9rem;'>{note} "
+        f"<span style='color:#64748b;'>(top {top:.2f} vs. median-of-rest {median_of_rest:.2f}, "
+        f"spread {spread:+.2f})</span></span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def _render_results(profile: Dict, k: int, alpha: float) -> None:
@@ -360,8 +413,43 @@ def _render_results(profile: Dict, k: int, alpha: float) -> None:
         )
 
     st.markdown("### Top matches")
+    _render_ranking_confidence(results)
     for i, result in enumerate(results, start=1):
-        _render_result_card(i, result)
+        gap = (result["score"] - results[i]["score"]) if i < len(results) else None
+        _render_result_card(i, result, gap_to_next=gap)
+
+
+# --------------------------------------------------------------------------
+# Reliability tab
+# --------------------------------------------------------------------------
+
+RELIABILITY_REPORT_PATH = REPO_ROOT / "assets" / "reliability_report.md"
+
+
+def _render_reliability_tab() -> None:
+    st.markdown(
+        "<h2 style='margin-bottom:0;'>🧪 Parser Reliability</h2>"
+        "<p style='color:#94a3b8;margin-top:6px;'>"
+        "The scoring engine is deterministic and covered by unit tests. The "
+        "LLM parser is not — so we run a golden set of natural-language "
+        "prompts through it and check each parsed profile against hand-written "
+        "expectations. Regenerate with "
+        "<code>python -m scripts.evaluate_parser</code>."
+        "</p>",
+        unsafe_allow_html=True,
+    )
+
+    if not RELIABILITY_REPORT_PATH.exists():
+        st.info(
+            "No reliability report on disk yet. Run "
+            "`python -m scripts.evaluate_parser` to generate one — it hits "
+            "Gemini with a set of known prompts and writes the results to "
+            f"`{RELIABILITY_REPORT_PATH.relative_to(REPO_ROOT)}`."
+        )
+        return
+
+    report_md = RELIABILITY_REPORT_PATH.read_text()
+    st.markdown(report_md, unsafe_allow_html=True)
 
 
 # --------------------------------------------------------------------------
@@ -376,26 +464,32 @@ def main() -> None:
     )
 
     source, alt_profile, k, alpha = _render_sidebar()
-    nl_profile = _render_hero()
 
-    active_profile = nl_profile if source == "AI description" else alt_profile
+    rec_tab, rel_tab = st.tabs(["🎵 Recommendations", "🧪 Reliability"])
 
-    if source == "AI description" and st.session_state.get("nl_profile"):
-        _render_parsed_profile_panel(
-            st.session_state["nl_profile"],
-            st.session_state.get("nl_rationale", ""),
-        )
+    with rec_tab:
+        nl_profile = _render_hero()
 
-    if active_profile is None:
-        if source == "AI description":
-            st.info(
-                "Click **Find my vibe** (or an example chip) to generate a profile "
-                "and see matching songs. Or use the sidebar to pick a preset / "
-                "build a custom profile."
+        active_profile = nl_profile if source == "AI description" else alt_profile
+
+        if source == "AI description" and st.session_state.get("nl_profile"):
+            _render_parsed_profile_panel(
+                st.session_state["nl_profile"],
+                st.session_state.get("nl_rationale", ""),
             )
-        return
 
-    _render_results(active_profile, k, alpha)
+        if active_profile is None:
+            if source == "AI description":
+                st.info(
+                    "Click **Find my vibe** (or an example chip) to generate a profile "
+                    "and see matching songs. Or use the sidebar to pick a preset / "
+                    "build a custom profile."
+                )
+        else:
+            _render_results(active_profile, k, alpha)
+
+    with rel_tab:
+        _render_reliability_tab()
 
 
 if __name__ == "__main__":
