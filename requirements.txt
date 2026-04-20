@@ -1,0 +1,6 @@
+pandas
+pytest
+streamlit
+plotly
+google-genai
+python-dotenv

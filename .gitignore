@@ -1,0 +1,24 @@
+# Byte compiled
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# OS files
+.DS_Store
+
+# Pytest cache
+.pytest_cache/
+
+# Secrets
+.env
+.env.local
+
+# Working notes / agent-collaboration docs (not part of the public deliverable)
+HANDOFF.md
+implementation_plan.md
+extension_ideas.md
