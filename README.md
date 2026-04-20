@@ -10,7 +10,7 @@ VibeMatch 2.0 is a content-based music recommender where you describe how you're
 
 I recorded a short walk-through showing the natural language input, the feature importance charts, and the Reliability tab in action.
 
-**[Watch the demo on Google Drive](PASTE_YOUR_GOOGLE_DRIVE_LINK_HERE)**
+**[Watch the demo on Google Drive](https://drive.google.com/drive/folders/1xE5cfaO5ShMCWQEJnQGuNiVSEofKd8mG?usp=sharing)**
 
 ---
 
@@ -229,6 +229,26 @@ Every bigger architectural choice involved a trade-off. These are the ones I thi
 ## Reflection
 
 VibeMatch 2.0 shows how I approach AI engineering. I started with a plain command line music recommender I built for AI110 Module 3 and asked what would make it trustworthy to use, not just functional. Adapting it meant adding a Streamlit dashboard, feature importance charts that explain every score, and a Gemini powered natural language profile builder. The decision I'm proudest of is keeping the LLM as a translator rather than a decision maker, so the ranking stays deterministic and auditable. I think that says I care more about AI systems that show their work than ones that look clever.
+
+### Limitations and biases
+
+The system inherits every bias from VibeMatch 1.0's catalog and adds a few new ones on top. The catalog itself is 20 songs with lofi dominating at three entries and most other genres holding only one, so any user whose taste falls outside the well-represented genres will see weaker matches by construction. Decade coverage is also uneven: there are no 1970s or 1980s songs, which is exactly why the evaluation harness caught Gemini picking 2010 for an "80s retro" prompt. The LLM itself brings its own assumptions. Gemini's training data skews toward Western, English-language music culture, so its mappings of qualitative cues like "calm" or "upbeat" to specific genres reflect those norms more than any universal truth. There's also no personalization loop: every session starts from scratch, so the system can't learn that a given user actually prefers folk to what it led with last time.
+
+### Could this be misused?
+
+A music recommender is low-stakes on its own, but two risks are worth flagging. First, anything typed into the natural language box is sent to Google Gemini's free tier, where the terms of service allow inputs and outputs to be used to improve the model. Someone typing emotionally specific context (*"I just got dumped and want something to cry to"*) should know that, which is why the UI carries a small disclosure note next to the input. Second, and more significant: the architecture pattern here (an LLM translates language into a structured profile, a deterministic engine makes the final decision) would be easy to copy into higher-stakes domains like content moderation or loan pre-qualification. The same design can hide real harm if someone strips out the transparency layers I built in, meaning the rationale panel, the feature importance charts, and the reliability report. So the defense is really the transparency, not the architecture itself.
+
+### What surprised me in reliability testing
+
+Two things. The first was how thoughtfully Gemini handled the "80s retro" case. I expected a rigid "pick something from the enum list" response. Instead it picked 2010 and explicitly wrote *"synthwave's resurgence"* in its rationale to explain why. That level of self-awareness about the constraint was not something I expected, and it changed how I wrote the test: I loosened the assertion to match catalog reality instead of treating the model's behavior as a failure. The second surprise was the adversarial contradiction case. I had assumed Gemini would either refuse, pick one side, or return something bland in the middle. Instead it named the contradiction in its rationale and reasoned its way to ambient music by redefining "loud" as "rich soundscape" rather than "high energy." Both results made me more confident that keeping the LLM in the translator role was the right call.
+
+### Collaborating with AI on this project
+
+I used Claude (Anthropic's coding assistant) to pair-program through most of this build, and it's worth being honest about where that helped and where it misled me.
+
+**One helpful suggestion.** When I asked for a reliability system, Claude suggested a golden-set evaluation harness with declarative constraints (field, operator, expected value, rationale) instead of just adding more unit tests. That was a better idea than what I would have done on my own. The declarative structure made the markdown report fall out naturally, and when the 80s retro case failed on the first live run, the constraint table made the problem obvious in about thirty seconds.
+
+**One flawed suggestion.** When I was picking a free LLM API, Claude told me Gemini 2.5 Flash's free tier was 15 requests per minute. It's actually 5. I didn't catch the mistake until the first full harness run, when calls seven and eight came back with `429 RESOURCE_EXHAUSTED`. I had to go back and add 13-second pacing between calls. The fix was small but the lesson was bigger: even when an AI assistant sounds confident about a specific number, it's worth verifying against the provider's actual docs before building around it.
 
 ---
 
