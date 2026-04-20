@@ -6,6 +6,14 @@ VibeMatch 2.0 is a content-based music recommender where you describe how you're
 
 ---
 
+## Demo Video
+
+I recorded a short walk-through showing the natural language input, the feature importance charts, and the Reliability tab in action.
+
+**[Watch the demo on Google Drive](PASTE_YOUR_GOOGLE_DRIVE_LINK_HERE)**
+
+---
+
 ## Original Project: VibeMatch 1.0
 
 The starter version of this, which I called **VibeMatch 1.0**, was the project I built for **AI110 Module 3** (*Music Recommender Simulation*). It was a command line tool on top of a 20-song CSV catalog. The scoring logic used Gaussian decay on numeric features (energy, valence, danceability, and a few others) plus binary matching on genre and mood, with seven pre-written user profiles for testing. The model card I wrote for it flagged a problem right at the start:
