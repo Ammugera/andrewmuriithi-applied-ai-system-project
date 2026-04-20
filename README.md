@@ -37,6 +37,102 @@ Out of 20 songs, 3 were lofi and most other genres only had 1 song each. That qu
 
 ## Architecture Overview
 
+```mermaid
+flowchart TB
+    %% ---------- User input ----------
+    subgraph INPUT["1 · User Input"]
+        direction LR
+        NL["Natural-language<br/>description<br/>e.g. 'chill study vibes'"]
+        Preset["Preset profile<br/>7 options"]
+        Custom["Custom sliders"]
+    end
+
+    %% ---------- LLM Agent ----------
+    subgraph AGENT["2 · LLM Agent: Google Gemini 2.5 Flash"]
+        direction TB
+        Prompt["System prompt +<br/>catalog vocabulary<br/>genres / moods / tags"]
+        Parse["parse_profile_from_text<br/>structured JSON output"]
+        Validate["Schema validator +<br/>numeric clamper"]
+    end
+
+    %% ---------- Deterministic engine ----------
+    subgraph ENGINE["3 · Deterministic Scoring Engine"]
+        direction TB
+        Catalog[("songs.csv<br/>20 songs · 17 genres")]
+        Score["score_song_detailed<br/>Gaussian decay +<br/>weighted sum"]
+        Rank["recommend_songs_detailed<br/>sort · top-k"]
+    end
+
+    %% ---------- Explainability ----------
+    subgraph XAI["4 · Explainability Layer"]
+        direction TB
+        FI["Feature importance<br/>per-feature points"]
+        Conf["Confidence check<br/>flag if top &lt; 0.45"]
+        Rat["LLM rationale<br/>'here's how I read you'"]
+    end
+
+    %% ---------- Output ----------
+    subgraph UI["5 · Streamlit Dashboard"]
+        direction TB
+        Hero["Hero NL input +<br/>example chips"]
+        Panel["How Gemini read you<br/>rationale panel"]
+        Cards["Ranked cards +<br/>gradient score bars"]
+        Charts["Plotly feature<br/>importance charts"]
+        Warn["Low-match<br/>warning banner"]
+    end
+
+    %% ---------- Human + Tests ----------
+    subgraph HUMAN["6 · Human-in-the-Loop"]
+        direction TB
+        H1>"User reviews parsed profile<br/>before trusting results"]
+        H2>"User decides whether to<br/>accept low-match results"]
+        H3>"User can override via<br/>Preset / Custom"]
+    end
+
+    subgraph TEST["Automated Tests (CI, no live API)"]
+        direction LR
+        T1["test_recommender.py<br/>8 tests: scoring invariants,<br/>weight-sum = total,<br/>ranking correctness"]
+        T2["test_profile_parser.py<br/>4 mocked tests: schema validation,<br/>clamping, error fallback"]
+    end
+
+    %% ---------- Data flow ----------
+    NL --> Prompt
+    Prompt --> Parse
+    Parse --> Validate
+    Validate -->|"structured profile"| Score
+    Preset --> Score
+    Custom --> Score
+    Catalog --> Score
+    Score --> Rank
+    Rank --> FI
+    Rank --> Conf
+    Parse -. "rationale string" .-> Rat
+
+    FI --> Charts
+    Conf --> Warn
+    Rank --> Cards
+    Rat --> Panel
+    Hero --> NL
+
+    Panel --> H1
+    Warn --> H2
+    Cards --> H3
+
+    T1 -. "verifies" .-> ENGINE
+    T1 -. "verifies" .-> XAI
+    T2 -. "verifies" .-> AGENT
+
+    %% ---------- Styling ----------
+    classDef agent fill:#a855f7,stroke:#7e22ce,color:white
+    classDef engine fill:#1a1a2e,stroke:#6366f1,color:#e2e8f0
+    classDef human fill:#ec4899,stroke:#9d174d,color:white
+    classDef test fill:#22c55e,stroke:#166534,color:white
+    class AGENT agent
+    class ENGINE engine
+    class HUMAN human
+    class TEST test
+```
+
 The system is six components in a pipeline, with a check at each boundary:
 
 1. **User Input** - three ways in: natural language description, one of the 7 presets, or custom sliders. The text box is the default experience.
@@ -46,7 +142,7 @@ The system is six components in a pipeline, with a check at each boundary:
 5. **Streamlit Dashboard** - the hero NL input at the top, result cards with score bars and confidence badges, expandable feature importance charts, and the Reliability tab.
 6. **Human-in-the-Loop** - the "How Gemini read you" panel lets the user see the parsed profile before trusting the results. If it looks wrong they can always switch to preset or custom.
 
-The full Mermaid-rendered diagram is at [assets/system_diagram.md](assets/system_diagram.md). The scoring pipeline diagram from the starter is still at [assets/flowchart.md](assets/flowchart.md).
+Supporting tables (components at a glance, every verification checkpoint with code references, and the responsible-AI design note) live in [assets/system_diagram.md](assets/system_diagram.md). The scoring pipeline diagram from the starter is at [assets/flowchart.md](assets/flowchart.md).
 
 ---
 
